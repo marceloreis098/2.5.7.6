@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { getLicenses, addLicense, updateLicense, deleteLicense, renameProduct, getLicenseTotals, saveLicenseTotals } from '../services/apiService';
 import { License, User, UserRole } from '../types';
@@ -520,7 +521,7 @@ const LicenseControl: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         );
     };
 
-    {/* FIX: Replaced fragile date parsing with a more robust `parseDateString` function and updated related helpers to ensure type safety. */}
+    // FIX: Replaced fragile date parsing with a more robust `parseDateString` function and updated related helpers to ensure type safety.
     const parseDateString = (dateStr: string | undefined): Date | null => {
         if (!dateStr || typeof dateStr !== 'string') return null;
         let date = new Date(dateStr);

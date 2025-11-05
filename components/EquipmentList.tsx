@@ -662,6 +662,52 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
         });
     }, [searchTerm, equipment, filterStatus, filterType, filterGrupoPoliticas]);
 
+    const handleExportToCsv = () => {
+        if (filteredEquipment.length === 0) {
+            alert("Nenhum dado para exportar com os filtros atuais.");
+            return;
+        }
+    
+        const headers: (keyof Equipment)[] = [
+            'id', 'equipamento', 'garantia', 'patrimonio', 'serial', 'usuarioAtual', 'usuarioAnterior',
+            'local', 'setor', 'dataEntregaUsuario', 'status', 'dataDevolucao', 'tipo', 'notaCompra',
+            'notaPlKm', 'termoResponsabilidade', 'brand', 'model', 'observacoes', 'emailColaborador',
+            'identificador', 'nomeSO', 'memoriaFisicaTotal', 'grupoPoliticas', 'pais', 'cidade',
+            'estadoProvincia', 'condicaoTermo', 'approval_status'
+        ];
+    
+        const escapeCsvCell = (cell: any): string => {
+            if (cell === null || cell === undefined) {
+                return '""';
+            }
+            const cellString = String(cell);
+            if (/[",\n\r]/.test(cellString)) {
+                return `"${cellString.replace(/"/g, '""')}"`;
+            }
+            return `"${cellString}"`;
+        };
+        
+        const headerRow = headers.join(',');
+        const rows = filteredEquipment.map(item => 
+            headers.map(header => escapeCsvCell(item[header])).join(',')
+        );
+    
+        const csvString = [headerRow, ...rows].join('\n');
+        
+        const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const fileName = `inventario_equipamentos_${new Date().toISOString().split('T')[0]}.csv`;
+        
+        link.setAttribute("href", url);
+        link.setAttribute("download", fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
     const uniqueStatuses = useMemo(() => {
         const statuses = new Set(equipment.map(item => item.status).filter(Boolean) as string[]);
         return ['', ...Array.from(statuses)].sort();
@@ -792,6 +838,11 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
                     {isAdmin && settings.hasInitialConsolidationRun && (
                         <button onClick={() => setIsUpdateModalOpen(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2">
                             <Icon name="History" size={18}/> Atualização Periódica (CSV)
+                        </button>
+                    )}
+                    {isAdmin && (
+                        <button onClick={handleExportToCsv} className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 flex items-center gap-2">
+                            <Icon name="FileDown" size={18}/> Exportar para Excel
                         </button>
                     )}
                     <button onClick={() => handleOpenFormModal()} className="bg-brand-primary text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
