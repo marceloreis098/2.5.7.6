@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Equipment, User, UserRole, EquipmentHistory } from '../types';
+import { Equipment, User, UserRole, EquipmentHistory, AppSettings } from '../types';
 import Icon from './common/Icon';
 import { QRCodeCanvas as QRCode } from 'qrcode.react';
-import { getEquipment, getEquipmentHistory, addEquipment, updateEquipment, deleteEquipment } from '../services/apiService';
+import { getEquipment, getEquipmentHistory, addEquipment, updateEquipment, deleteEquipment, getSettings } from '../services/apiService';
 import TermoResponsabilidade from './TermoResponsabilidade';
+import PeriodicUpdate from './PeriodicUpdate'; // Importar o novo componente
 
 const StatusBadge: React.FC<{ status: Equipment['approval_status'], reason?: string }> = ({ status, reason }) => {
     if (!status || status === 'approved') return null;
@@ -510,22 +511,28 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
     const [termoData, setTermoData] = useState<{ equipment: Equipment, type: 'entrega' | 'devolucao' } | null>(null);
     const [entregaEquipment, setEntregaEquipment] = useState<Equipment | null>(null);
     const [devolucaoEquipment, setDevolucaoEquipment] = useState<Equipment | null>(null);
+    const [settings, setSettings] = useState<Partial<AppSettings>>({});
+    const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
 
 
-    const loadEquipment = async () => {
+    const loadData = async () => {
         setLoading(true);
         try {
-            const data = await getEquipment(currentUser);
+            const [data, settingsData] = await Promise.all([
+                getEquipment(currentUser),
+                getSettings()
+            ]);
             setEquipment(data);
+            setSettings(settingsData);
         } catch (error) {
-            console.error("Failed to load equipment", error);
+            console.error("Failed to load data", error);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        loadEquipment();
+        loadData();
     }, [currentUser]);
 
     const handleOpenFormModal = (item: Equipment | null = null) => {
@@ -580,7 +587,7 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
 
         try {
             await updateEquipment(updatedEquipment, currentUser.username);
-            loadEquipment();
+            loadData();
             setEntregaEquipment(null);
             setTermoData({ equipment: updatedEquipment, type: 'entrega' });
         } catch (error) {
@@ -602,7 +609,7 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
 
         try {
             await updateEquipment(updatedEquipment, currentUser.username);
-            loadEquipment();
+            loadData();
             setDevolucaoEquipment(null);
             setTermoData({ equipment: updatedEquipment, type: 'devolucao' });
         } catch (error) {
@@ -613,7 +620,7 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
 
 
     const handleSave = () => {
-        loadEquipment();
+        loadData();
         handleCloseFormModal();
         handleCloseDetailModal(); // Close detail if opened from it
     };
@@ -622,7 +629,7 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
         if (!window.confirm("Tem certeza que deseja excluir este equipamento?")) return;
         try {
             await deleteEquipment(id, currentUser.username);
-            loadEquipment();
+            loadData();
             handleCloseDetailModal(); // Close detail after deleting
         } catch (error) {
             console.error("Failed to delete equipment", error);
@@ -632,6 +639,13 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
     const handleCloseTermo = () => {
         setTermoData(null);
     };
+
+    const handleUpdateSuccess = () => {
+        loadData();
+        setIsUpdateModalOpen(false);
+        alert("Atualização periódica concluída com sucesso!");
+    };
+
 
     const filteredEquipment = useMemo(() => {
         return equipment.filter(item => {
@@ -663,6 +677,7 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
         return ['', ...Array.from(grupos)].sort();
     }, [equipment]);
 
+    const isAdmin = currentUser.role === UserRole.Admin;
     const isAdminOrUserManager = currentUser.role === UserRole.Admin || currentUser.role === UserRole.UserManager;
 
     const ActionButtons: React.FC<{ item: Equipment }> = ({ item }) => {
@@ -773,9 +788,16 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
         <div className="bg-white dark:bg-dark-card p-4 sm:p-6 rounded-lg shadow-md">
             <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4">
                 <h2 className="text-2xl font-bold text-brand-dark dark:text-dark-text-primary">Inventário de Equipamentos</h2>
-                <button onClick={() => handleOpenFormModal()} className="bg-brand-primary text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 self-start sm:self-center">
-                    <Icon name="CirclePlus" size={18}/> Novo Equipamento
-                </button>
+                <div className="flex flex-wrap gap-2 self-start sm:self-center">
+                    {isAdmin && settings.hasInitialConsolidationRun && (
+                        <button onClick={() => setIsUpdateModalOpen(true)} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2">
+                            <Icon name="History" size={18}/> Atualização Periódica (CSV)
+                        </button>
+                    )}
+                    <button onClick={() => handleOpenFormModal()} className="bg-brand-primary text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                        <Icon name="CirclePlus" size={18}/> Novo Equipamento
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-6">
@@ -882,6 +904,21 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
             {termoData && <TermoResponsabilidade equipment={termoData.equipment} user={currentUser} onClose={handleCloseTermo} companyName={companyName} termoType={termoData.type} />}
             {entregaEquipment && <EntregaEquipamentoModal equipment={entregaEquipment} onClose={() => setEntregaEquipment(null)} onSave={handleSaveEntrega} />}
             {devolucaoEquipment && <DevolucaoEquipamentoModal equipment={devolucaoEquipment} onClose={() => setDevolucaoEquipment(null)} onConfirm={handleConfirmDevolucao} />}
+
+            {isUpdateModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+                    <div className="bg-white dark:bg-dark-card rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+                         <div className="p-4 border-b dark:border-dark-border flex justify-between items-center">
+                            <h3 className="text-lg font-bold">Atualização Periódica de Inventário</h3>
+                            <button onClick={() => setIsUpdateModalOpen(false)}><Icon name="X" /></button>
+                        </div>
+                        <div className="p-4 overflow-y-auto">
+                            <PeriodicUpdate currentUser={currentUser} onUpdateSuccess={handleUpdateSuccess} />
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 };

@@ -170,7 +170,8 @@ const runMigrations = async () => {
                 `
             },
             { id: 9, sql: "ALTER TABLE equipment ADD COLUMN emailColaborador VARCHAR(255);" },
-            { id: 10, sql: `
+            {
+                id: 10, sql: `
                 INSERT IGNORE INTO app_config (config_key, config_value) VALUES ('termo_entrega_template', NULL);
                 INSERT IGNORE INTO app_config (config_key, config_value) VALUES ('termo_devolucao_template', NULL);
             `},
@@ -211,6 +212,12 @@ const runMigrations = async () => {
             { // Migration 19: Set status to 'Em Uso' for equipment with a current user
                 id: 19, sql: `
                 UPDATE equipment SET status = 'Em Uso' WHERE usuarioAtual IS NOT NULL AND usuarioAtual != '';
+                `
+            },
+            { // Migration 20: Add flags for inventory update flow
+                id: 20, sql: `
+                INSERT IGNORE INTO app_config (config_key, config_value) VALUES ('hasInitialConsolidationRun', 'false');
+                INSERT IGNORE INTO app_config (config_key, config_value) VALUES ('lastAbsoluteUpdateTimestamp', NULL);
                 `
             }
         ];
@@ -570,7 +577,10 @@ app.post('/api/equipment/import', isAdmin, async (req, res) => {
             const qrCodeValue = JSON.stringify({ id: insertedId, serial: newEquipment.serial, type: 'equipment' });
             await connection.query('UPDATE equipment SET qrCode = ? WHERE id = ?', [qrCodeValue, insertedId]);
         }
-
+        
+        // Set consolidation flags
+        await connection.query("INSERT INTO app_config (config_key, config_value) VALUES ('hasInitialConsolidationRun', 'true'), ('lastAbsoluteUpdateTimestamp', NOW()) ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)");
+        
         await connection.commit();
         logAction(username, 'UPDATE', 'EQUIPMENT', 'ALL', `Replaced entire equipment inventory with ${equipmentList.length} items via consolidation tool.`);
         res.json({ success: true, message: 'Inventário de equipamentos importado com sucesso.' });
@@ -582,6 +592,67 @@ app.post('/api/equipment/import', isAdmin, async (req, res) => {
         connection.release();
     }
 });
+
+app.post('/api/equipment/periodic-update', isAdmin, async (req, res) => {
+    const { equipmentList, username } = req.body;
+    const connection = await db.promise().getConnection();
+    try {
+        await connection.beginTransaction();
+
+        for (const equipment of equipmentList) {
+            const { serial } = equipment;
+            if (!serial || String(serial).trim() === '') continue;
+
+            const [existingRows] = await connection.query('SELECT * FROM equipment WHERE serial = ?', [serial]);
+
+            if (existingRows.length > 0) {
+                // UPDATE
+                const oldEquipment = existingRows[0];
+                const changes = Object.keys(equipment).reduce((acc, key) => {
+                    if (key !== 'id' && String(oldEquipment[key] || '') !== String(equipment[key] || '')) {
+                        acc.push({ field: key, oldValue: oldEquipment[key], newValue: equipment[key] });
+                    }
+                    return acc;
+                }, []);
+                
+                if (changes.length > 0) {
+                    // Remove id from the update payload to avoid errors
+                    const {id, ...updatePayload} = equipment;
+                    await connection.query('UPDATE equipment SET ? WHERE id = ?', [updatePayload, oldEquipment.id]);
+                    
+                    for (const change of changes) {
+                        await connection.query(
+                            'INSERT INTO equipment_history (equipment_id, changedBy, changeType, from_value, to_value) VALUES (?, ?, ?, ?, ?)',
+                            [oldEquipment.id, username, change.field, String(change.oldValue || ''), String(change.newValue || '')]
+                        );
+                    }
+                    logAction(username, 'UPDATE', 'EQUIPMENT', oldEquipment.id, `Periodic update for ${equipment.equipamento || oldEquipment.equipamento}. Changes: ${changes.map(c => c.field).join(', ')}`);
+                }
+            } else {
+                // INSERT
+                const { id, ...newEquipment } = equipment;
+                newEquipment.approval_status = 'approved'; // Updates are pre-approved
+                newEquipment.created_by_id = (await db.promise().query('SELECT id FROM users WHERE username = ?', [username]))[0][0].id;
+                const [result] = await connection.query('INSERT INTO equipment SET ?', newEquipment);
+                const insertedId = result.insertId;
+                const qrCodeValue = JSON.stringify({ id: insertedId, serial: newEquipment.serial, type: 'equipment' });
+                await connection.query('UPDATE equipment SET qrCode = ? WHERE id = ?', [qrCodeValue, insertedId]);
+                logAction(username, 'CREATE', 'EQUIPMENT', insertedId, `Created new equipment via periodic update: ${newEquipment.equipamento}`);
+            }
+        }
+
+        await connection.query("INSERT INTO app_config (config_key, config_value) VALUES ('lastAbsoluteUpdateTimestamp', NOW()) ON DUPLICATE KEY UPDATE config_value = NOW()");
+        await connection.commit();
+        res.json({ success: true, message: 'Inventário atualizado com sucesso.' });
+    } catch (err) {
+        await connection.rollback();
+        console.error("Periodic update error:", err);
+        res.status(500).json({ success: false, message: `Erro de banco de dados: ${err.message}` });
+    } finally {
+        connection.release();
+    }
+});
+
 
 // --- LICENSES ---
 app.get('/api/licenses', (req, res) => {
@@ -1004,17 +1075,11 @@ app.post('/api/database/clear', isAdmin, async (req, res) => {
     try {
         await connection.beginTransaction();
         await connection.query('SET FOREIGN_KEY_CHECKS = 0;');
-        await connection.query('DELETE FROM equipment_history');
-        await connection.query('DELETE FROM licenses');
-        await connection.query('DELETE FROM equipment');
-        await connection.query('DELETE FROM audit_log');
-        await connection.query('DELETE FROM app_config');
+        const tables = ['equipment_history', 'licenses', 'equipment', 'audit_log', 'app_config', 'migrations'];
+        for(const table of tables){
+            await connection.query(`TRUNCATE TABLE ${table}`);
+        }
         await connection.query('DELETE FROM users WHERE username != ?', ['admin']);
-        await connection.query('ALTER TABLE equipment_history AUTO_INCREMENT = 1');
-        await connection.query('ALTER TABLE licenses AUTO_INCREMENT = 1');
-        await connection.query('ALTER TABLE equipment AUTO_INCREMENT = 1');
-        await connection.query('ALTER TABLE audit_log AUTO_INCREMENT = 1');
-        await connection.query('ALTER TABLE app_config AUTO_INCREMENT = 1');
         await connection.query('SET FOREIGN_KEY_CHECKS = 1;');
         await connection.commit();
         

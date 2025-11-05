@@ -90,7 +90,7 @@ export interface AuditLogEntry {
     id: number;
     username: string;
     action_type: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | '2FA_ENABLE' | '2FA_DISABLE' | 'SETTINGS_UPDATE';
-    target_type: 'EQUIPMENT' | 'LICENSE' | 'USER' | 'SETTINGS' | 'PRODUCT' | 'TOTALS';
+    target_type: 'EQUIPMENT' | 'LICENSE' | 'USER' | 'SETTINGS' | 'PRODUCT' | 'TOTALS' | 'DATABASE';
     target_id: number | string | null;
     details: string;
     timestamp: string;
@@ -111,4 +111,6 @@ export interface AppSettings {
     smtpSecure?: boolean;
     termo_entrega_template?: string;
     termo_devolucao_template?: string;
+    hasInitialConsolidationRun?: boolean;
+    lastAbsoluteUpdateTimestamp?: string;
 }

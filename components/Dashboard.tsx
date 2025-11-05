@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
-import { getEquipment, getLicenses } from '../services/apiService';
-import { Equipment, License, Page, User, UserRole } from '../types';
+import { getEquipment, getLicenses, getSettings } from '../services/apiService';
+import { Equipment, License, Page, User, UserRole, AppSettings } from '../types';
 import Icon from './common/Icon';
 
 const ApprovalQueue = lazy(() => import('./ApprovalQueue'));
@@ -15,20 +15,73 @@ interface DashboardProps {
 
 const PIE_COLORS = ['#3498db', '#2ecc71', '#f1c40f', '#e74c3c', '#9b59b6', '#1abc9c', '#d35400'];
 
+const InventoryStatusPanel: React.FC<{ settings: Partial<AppSettings>; setActivePage: (page: Page) => void; }> = ({ settings, setActivePage }) => {
+    if (settings.hasInitialConsolidationRun === undefined) {
+        return null; // Don't show while loading
+    }
+
+    if (!settings.hasInitialConsolidationRun) {
+        return (
+            <div className="bg-yellow-100 dark:bg-yellow-900/30 border-l-4 border-yellow-500 text-yellow-800 dark:text-yellow-200 p-4 rounded-lg shadow-md flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-3">
+                    <Icon name="TriangleAlert" size={24} />
+                    <div>
+                        <h4 className="font-bold">Ação Necessária</h4>
+                        <p>A consolidação inicial do inventário de equipamentos está pendente.</p>
+                    </div>
+                </div>
+                <button onClick={() => setActivePage('Configurações')} className="bg-yellow-500 text-white font-bold py-2 px-4 rounded hover:bg-yellow-600 transition-colors flex-shrink-0">
+                    Realizar Consolidação
+                </button>
+            </div>
+        );
+    }
+
+    const lastUpdate = settings.lastAbsoluteUpdateTimestamp ? new Date(settings.lastAbsoluteUpdateTimestamp) : null;
+    const now = new Date();
+    const hoursDiff = lastUpdate ? (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60) : Infinity;
+    const isUpdatePending = hoursDiff > 48;
+
+    return (
+        <div className={`p-4 rounded-lg shadow-md flex flex-col sm:flex-row justify-between items-center gap-4 ${isUpdatePending ? 'bg-orange-100 dark:bg-orange-900/30 border-l-4 border-orange-500 text-orange-800 dark:text-orange-200' : 'bg-green-100 dark:bg-green-900/30 border-l-4 border-green-500 text-green-800 dark:text-green-200'}`}>
+             <div className="flex items-center gap-3">
+                <Icon name={isUpdatePending ? "History" : "CheckCircle"} size={24} />
+                <div>
+                    <h4 className="font-bold">Status da Atualização do Inventário</h4>
+                    {lastUpdate ? (
+                        <p>Última atualização: {lastUpdate.toLocaleString('pt-BR')}</p>
+                    ) : (
+                        <p>Nenhuma atualização registrada.</p>
+                    )}
+                </div>
+            </div>
+            {isUpdatePending && (
+                 <button onClick={() => setActivePage('Configurações')} className="bg-orange-500 text-white font-bold py-2 px-4 rounded hover:bg-orange-600 transition-colors flex-shrink-0">
+                    Atualizar Agora
+                </button>
+            )}
+        </div>
+    );
+};
+
+
 const Dashboard: React.FC<DashboardProps> = ({setActivePage, currentUser}) => {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [licenses, setLicenses] = useState<License[]>([]);
+  const [settings, setSettings] = useState<Partial<AppSettings>>({});
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [equipmentData, licensesData] = await Promise.all([
+      const [equipmentData, licensesData, settingsData] = await Promise.all([
         getEquipment(currentUser),
         getLicenses(currentUser),
+        currentUser.role === UserRole.Admin ? getSettings() : Promise.resolve({})
       ]);
       setEquipment(equipmentData);
       setLicenses(licensesData);
+      setSettings(settingsData);
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
     } finally {
@@ -102,9 +155,10 @@ const Dashboard: React.FC<DashboardProps> = ({setActivePage, currentUser}) => {
        {currentUser.role === UserRole.Admin && (
           <Suspense fallback={<div>Carregando...</div>}>
             <ApprovalQueue currentUser={currentUser} onAction={fetchData} />
+            <InventoryStatusPanel settings={settings} setActivePage={setActivePage} />
           </Suspense>
        )}
-      <h2 className="text-3xl font-bold text-brand-dark dark:text-dark-text-primary">Dashboard</h2>
+      <h2 className="text-3xl font-bold text-brand-dark dark:text-dark-text-primary mt-6">Dashboard</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard icon="Computer" title="Total de Itens" value={totalEquipment} color="bg-blue-500" onClick={() => setActivePage('Inventário de Equipamentos')} />
         <StatCard icon="Play" title="Em Uso" value={statusCounts['EM USO'] || 0} color="bg-status-active"/>

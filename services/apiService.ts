@@ -128,6 +128,10 @@ export const importEquipment = (data: Omit<Equipment, 'id'>[], username: string)
     return apiRequest('/equipment/import', { method: 'POST', body: JSON.stringify({ equipmentList: data, username }) });
 }
 
+export const periodicUpdateEquipment = (data: Partial<Equipment>[], username: string): Promise<{success: boolean, message: string}> => {
+    return apiRequest('/equipment/periodic-update', { method: 'POST', body: JSON.stringify({ equipmentList: data, username }) });
+}
+
 export interface LicenseImportData {
     productName: string;
     licenses: Omit<License, 'id' | 'produto'>[];
