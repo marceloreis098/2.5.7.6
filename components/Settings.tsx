@@ -456,15 +456,6 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
                                             </div>
                                         </div>
     
-                                        <div>
-                                            <h4 className="font-semibold text-gray-800 dark:text-dark-text-primary">Opção 1: Upload de Metadados</h4>
-                                            <p className="text-sm text-gray-500 dark:text-dark-text-secondary mt-1 mb-3">Faça o upload do arquivo XML de metadados do seu provedor de identidade para preencher os campos automaticamente.</p>
-                                            <input type="file" accept=".xml, text/xml" onChange={handleMetadataUpload} id="metadata-upload" className="hidden" />
-                                            <label htmlFor="metadata-upload" className="cursor-pointer inline-flex items-center gap-2 bg-brand-secondary text-white px-4 py-2 rounded-lg hover:bg-gray-700">
-                                                <Icon name="UploadCloud" size={18} /> Carregar Arquivo XML
-                                            </label>
-                                        </div>
-    
                                         <div className="relative flex items-center">
                                             <div className="flex-grow border-t dark:border-dark-border"></div>
                                             <span className="flex-shrink mx-4 text-gray-400 dark:text-dark-text-secondary text-sm">OU</span>

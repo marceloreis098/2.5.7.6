@@ -1,9 +1,3 @@
-
-
-
-
-
-
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { getLicenses, addLicense, updateLicense, deleteLicense, renameProduct, getLicenseTotals, saveLicenseTotals } from '../services/apiService';
 import { License, User, UserRole } from '../types';
@@ -525,7 +519,7 @@ const LicenseControl: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         );
     };
 
-    {/* FIX: Replaced fragile date parsing with a more robust `parseDateString` function and updated related helpers to ensure type safety. */}
+    // FIX: Replaced fragile date parsing with a more robust `parseDateString` function and updated related helpers to ensure type safety.
     const parseDateString = (dateStr: string | undefined): Date | null => {
         if (!dateStr || typeof dateStr !== 'string') return null;
         let date = new Date(dateStr);
@@ -558,13 +552,12 @@ const LicenseControl: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const ExpirationStatus: React.FC<{dateStr?: string}> = ({dateStr}) => {
         if (!dateStr || dateStr.toUpperCase() === 'N/A') return <span>Perpétua</span>;
         
-        const stringDate: string = dateStr;
-
-        const date = parseDateString(stringDate);
+        // At this point, dateStr is guaranteed to be a string.
+        const date = parseDateString(dateStr);
         if (!date) return <span className="font-semibold flex items-center gap-1.5 text-red-500"><Icon name="TriangleAlert" size={16} /> Data Inválida</span>;
         
-        const expiring = isExpiringSoon(stringDate);
-        const expired = isExpired(stringDate);
+        const expiring = isExpiringSoon(dateStr); // dateStr is correctly `string` here
+        const expired = isExpired(dateStr);       // dateStr is correctly `string` here
         const color = expired ? 'text-red-500 dark:text-red-400' : expiring ? 'text-yellow-500 dark:text-yellow-400' : '';
         const icon = expired ? 'TriangleAlert' : expiring ? 'Timer' : null;
         return (

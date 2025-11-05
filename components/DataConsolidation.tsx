@@ -176,7 +176,7 @@ const DataConsolidation: React.FC<{ currentUser: User }> = ({ currentUser }) => 
     
     const handleSaveToSystem = async () => {
         if (consolidatedData.length === 0) return;
-        if (!window.confirm(`Esta ação substituirá TODO o inventário de equipamentos por ${consolidatedData.length} novos itens consolidados. Esta ação é irreversível. Deseja continuar?`)) return;
+        if (!window.confirm(`ATENÇÃO: Esta ação substituirá TODO o inventário de equipamentos e seu histórico por ${consolidatedData.length} novos itens consolidados. Esta ação é irreversível. Deseja continuar?`)) return;
         
         setIsSaving(true);
         setError(null);
@@ -234,6 +234,13 @@ const DataConsolidation: React.FC<{ currentUser: User }> = ({ currentUser }) => 
                     isLoading={isLoading || isSaving}
                 />
             </div>
+            {/* Aviso de substituição de dados */}
+            <p className="mt-6 text-sm text-yellow-600 dark:text-yellow-400 flex items-start gap-2">
+                <Icon name="AlertTriangle" size={18} className="flex-shrink-0 mt-0.5" />
+                <span>
+                    Atenção: O processo de consolidação e importação substituirá <strong>TODO</strong> o inventário de equipamentos e seu histórico no sistema.
+                </span>
+            </p>
 
             <div className="mt-6 flex justify-center">
                 <button
