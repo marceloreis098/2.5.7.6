@@ -5,7 +5,9 @@ import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import { getEquipment, getEquipmentHistory, addEquipment, updateEquipment, deleteEquipment, getSettings } from '../services/apiService';
 import TermoResponsabilidade from './TermoResponsabilidade';
 import PeriodicUpdate from './PeriodicUpdate'; // Importar o novo componente
-import * as XLSX from 'xlsx';
+
+// Informa ao TypeScript que a variável XLSX existe globalmente (carregada via script no index.html)
+declare var XLSX: any;
 
 const StatusBadge: React.FC<{ status: Equipment['approval_status'], reason?: string }> = ({ status, reason }) => {
     if (!status || status === 'approved') return null;
@@ -664,59 +666,64 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
     }, [searchTerm, equipment, filterStatus, filterType, filterGrupoPoliticas]);
 
     const handleExportToXlsx = () => {
-        if (filteredEquipment.length === 0) {
-            alert("Nenhum dado para exportar com os filtros atuais.");
-            return;
-        }
+        try {
+            if (filteredEquipment.length === 0) {
+                alert("Nenhum dado para exportar com os filtros atuais.");
+                return;
+            }
 
-        // Mapeamento de chaves para cabeçalhos amigáveis
-        const headerMapping: { [K in keyof Equipment]?: string } = {
-            equipamento: 'Equipamento',
-            patrimonio: 'Patrimônio',
-            serial: 'Serial',
-            brand: 'Marca',
-            model: 'Modelo',
-            tipo: 'Tipo',
-            status: 'Status',
-            usuarioAtual: 'Usuário Atual',
-            emailColaborador: 'Email do Colaborador',
-            local: 'Local',
-            setor: 'Setor',
-            dataEntregaUsuario: 'Data de Entrega',
-            dataDevolucao: 'Data de Devolução',
-            condicaoTermo: 'Condição do Termo',
-            garantia: 'Garantia',
-            notaCompra: 'Nota de Compra',
-            identificador: 'Identificador',
-            nomeSO: 'Sistema Operacional',
-            memoriaFisicaTotal: 'Memória Física',
-            grupoPoliticas: 'Grupo de Políticas',
-            pais: 'País',
-            estadoProvincia: 'Estado/Província',
-            cidade: 'Cidade',
-            observacoes: 'Observações'
-        };
+            // Mapeamento de chaves para cabeçalhos amigáveis
+            const headerMapping: { [K in keyof Equipment]?: string } = {
+                equipamento: 'Equipamento',
+                patrimonio: 'Patrimônio',
+                serial: 'Serial',
+                brand: 'Marca',
+                model: 'Modelo',
+                tipo: 'Tipo',
+                status: 'Status',
+                usuarioAtual: 'Usuário Atual',
+                emailColaborador: 'Email do Colaborador',
+                local: 'Local',
+                setor: 'Setor',
+                dataEntregaUsuario: 'Data de Entrega',
+                dataDevolucao: 'Data de Devolução',
+                condicaoTermo: 'Condição do Termo',
+                garantia: 'Garantia',
+                notaCompra: 'Nota de Compra',
+                identificador: 'Identificador',
+                nomeSO: 'Sistema Operacional',
+                memoriaFisicaTotal: 'Memória Física',
+                grupoPoliticas: 'Grupo de Políticas',
+                pais: 'País',
+                estadoProvincia: 'Estado/Província',
+                cidade: 'Cidade',
+                observacoes: 'Observações'
+            };
 
-        const dataKeys = Object.keys(headerMapping) as (keyof Equipment)[];
+            const dataKeys = Object.keys(headerMapping) as (keyof Equipment)[];
 
-        // Mapeia os dados filtrados para o formato desejado com os cabeçalhos amigáveis
-        const dataToExport = filteredEquipment.map(item => {
-            const row: { [key: string]: any } = {};
-            dataKeys.forEach(key => {
-                const header = headerMapping[key];
-                if (header) {
-                    row[header] = item[key] ?? ''; // Usa string vazia para nulo/indefinido
-                }
+            // Mapeia os dados filtrados para o formato desejado com os cabeçalhos amigáveis
+            const dataToExport = filteredEquipment.map(item => {
+                const row: { [key: string]: any } = {};
+                dataKeys.forEach(key => {
+                    const header = headerMapping[key];
+                    if (header) {
+                        row[header] = item[key] ?? ''; // Usa string vazia para nulo/indefinido
+                    }
+                });
+                return row;
             });
-            return row;
-        });
 
-        const ws = XLSX.utils.json_to_sheet(dataToExport);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Inventário");
+            const ws = XLSX.utils.json_to_sheet(dataToExport);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Inventário");
 
-        const fileName = `inventario_equipamentos_${new Date().toISOString().split('T')[0]}.xlsx`;
-        XLSX.writeFile(wb, fileName);
+            const fileName = `inventario_equipamentos_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        } catch (error) {
+            console.error("Erro ao exportar para XLSX:", error);
+            alert("Ocorreu um erro inesperado ao tentar exportar a planilha. Verifique o console do navegador para mais detalhes.");
+        }
     };
 
 
