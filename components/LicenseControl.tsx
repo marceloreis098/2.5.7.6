@@ -306,4 +306,306 @@ const EditableTotal: React.FC<{
 
     if (isEditing) {
         return (
-            <div className="flex items-
+            <div className="flex items-center gap-2">
+                <input
+                    ref={inputRef}
+                    type="number"
+                    value={draftValue}
+                    onChange={(e) => setDraftValue(Number(e.target.value))}
+                    onKeyDown={handleKeyDown}
+                    onBlur={handleSave}
+                    className="w-20 p-1 border dark:border-dark-border rounded-md bg-white dark:bg-gray-800 text-center"
+                />
+                <button onClick={handleSave} className="text-green-500 hover:text-green-700" title="Salvar"><Icon name="Check" size={20} /></button>
+                <button onClick={handleCancel} className="text-red-500 hover:text-red-700" title="Cancelar"><Icon name="X" size={20} /></button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex items-center gap-2">
+            <span className="font-semibold text-gray-800 dark:text-dark-text-primary">{value}</span>
+            {!disabled && (
+                <button
+                    onClick={() => setIsEditing(true)}
+                    className="text-blue-500 hover:text-blue-700 disabled:opacity-50"
+                    title="Editar total"
+                >
+                    <Icon name="Pencil" size={14} />
+                </button>
+            )}
+        </div>
+    );
+};
+
+const LicenseControl: React.FC<{ currentUser: User }> = ({ currentUser }) => {
+    const [licenses, setLicenses] = useState<License[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+    const [editingLicense, setEditingLicense] = useState<License | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterProduct, setFilterProduct] = useState('');
+    const [licenseTotals, setLicenseTotals] = useState<Record<string, number>>({});
+    const [productNames, setProductNames] = useState<string[]>([]);
+    
+    const isAdmin = currentUser.role === UserRole.Admin;
+
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const [licensesData, totalsData] = await Promise.all([
+                getLicenses(currentUser),
+                getLicenseTotals()
+            ]);
+            setLicenses(licensesData);
+            setLicenseTotals(totalsData);
+            
+            const pNamesFromLicenses = [...new Set(licensesData.map(l => l.produto))];
+            const pNamesFromTotals = Object.keys(totalsData);
+            setProductNames([...new Set([...pNamesFromLicenses, ...pNamesFromTotals])].sort());
+        } catch (error) {
+            console.error("Failed to load license data:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadData();
+    }, [currentUser]);
+
+    const handleOpenFormModal = (license: License | null = null) => {
+        setEditingLicense(license);
+        setIsFormModalOpen(true);
+    };
+    
+    const handleCloseFormModal = () => {
+        setEditingLicense(null);
+        setIsFormModalOpen(false);
+    };
+
+    const handleSave = () => {
+        loadData();
+        handleCloseFormModal();
+    };
+
+    const handleDelete = async (id: number) => {
+        if (!window.confirm("Tem certeza que deseja excluir esta licença?")) return;
+        try {
+            await deleteLicense(id, currentUser.username);
+            loadData();
+        } catch (error) {
+            console.error("Failed to delete license", error);
+        }
+    };
+    
+    const handleSaveTotals = async (productName: string, newTotal: number) => {
+        const newTotals = { ...licenseTotals, [productName]: newTotal };
+        try {
+            await saveLicenseTotals(newTotals, currentUser.username);
+            setLicenseTotals(newTotals);
+        } catch (error) {
+            console.error("Failed to save license totals", error);
+        }
+    };
+
+    const handleSaveProducts = async (newProductNames: string[], renames: Record<string, string>) => {
+        setProductNames(newProductNames);
+        const newTotals = { ...licenseTotals };
+        for (const oldName in renames) {
+            const newName = renames[oldName];
+            if (oldName in newTotals) {
+                newTotals[newName] = newTotals[oldName];
+                delete newTotals[oldName];
+            }
+            await renameProduct(oldName, newName, currentUser.username);
+        }
+        await saveLicenseTotals(newTotals, currentUser.username);
+        await loadData();
+    };
+    
+    const filteredLicenses = useMemo(() => {
+        return licenses.filter(item => {
+            const matchesSearch = searchTerm ?
+                Object.values(item).some(value =>
+                    String(value).toLowerCase().includes(searchTerm.toLowerCase())
+                ) : true;
+
+            const matchesProduct = filterProduct ? item.produto === filterProduct : true;
+            return matchesSearch && matchesProduct;
+        });
+    }, [searchTerm, licenses, filterProduct]);
+
+    const licenseUsage = useMemo(() => {
+        return productNames.reduce((acc, name) => {
+            acc[name] = licenses.filter(l => l.produto === name).length;
+            return acc;
+        }, {} as Record<string, number>);
+    }, [licenses, productNames]);
+
+    const ExpirationStatus: React.FC<{ dateStr?: string }> = ({ dateStr }) => {
+        const parseDateString = (dateString: string) => {
+            const parts = dateString.split(/[-/]/);
+            if (parts.length === 3) {
+                 if (parts[0].length === 4) { // YYYY-MM-DD or YYYY/MM/DD
+                    return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                }
+            }
+            return new Date(dateString); // Fallback for other formats
+        };
+        
+        const isExpiringSoon = (dateStr: string | undefined): boolean => {
+             if (typeof dateStr === 'undefined' || dateStr === 'N/A') return false;
+            const expDate = parseDateString(dateStr);
+            if (isNaN(expDate.getTime())) return false;
+            const today = new Date();
+            const thirtyDaysFromNow = new Date();
+            thirtyDaysFromNow.setDate(today.getDate() + 30);
+            return expDate > today && expDate <= thirtyDaysFromNow;
+        };
+    
+        const isExpired = (dateStr: string | undefined): boolean => {
+            if (typeof dateStr === 'undefined' || dateStr === 'N/A') return false;
+            const expDate = parseDateString(dateStr);
+            if (isNaN(expDate.getTime())) return false;
+            const today = new Date();
+            return expDate < today;
+        };
+        
+        if (!dateStr || dateStr === 'N/A' || isNaN(parseDateString(dateStr).getTime())) {
+            return <span className="text-xs text-gray-500 dark:text-dark-text-secondary">Perpétua</span>;
+        }
+    
+        if (isExpired(dateStr)) {
+            return <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-200 text-red-800">Expirada</span>;
+        }
+        if (isExpiringSoon(dateStr)) {
+            return <span className="text-xs font-semibold px-2 py-1 rounded-full bg-yellow-200 text-yellow-800">Expira em breve</span>;
+        }
+        return <span className="text-xs text-gray-700 dark:text-dark-text-primary">{parseDateString(dateStr).toLocaleDateString('pt-BR')}</span>;
+    };
+    
+    const StatusBadge: React.FC<{ status: License['approval_status'] }> = ({ status }) => {
+        if (!status || status === 'approved') return null;
+        const statusMap = {
+            pending_approval: { text: 'Pendente', className: 'bg-yellow-200 text-yellow-800' },
+            rejected: { text: 'Rejeitado', className: 'bg-red-200 text-red-800' },
+        };
+        const currentStatus = statusMap[status];
+        if (!currentStatus) return null;
+        return <span className={`ml-2 text-xs font-semibold px-2 py-0.5 rounded-full ${currentStatus.className}`}>{currentStatus.text}</span>;
+    };
+    
+    return (
+        <div className="space-y-6">
+            <div className="bg-white dark:bg-dark-card p-4 sm:p-6 rounded-lg shadow-md">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4">
+                    <h2 className="text-2xl font-bold text-brand-dark dark:text-dark-text-primary">Controle de Licenças</h2>
+                    <div className="flex gap-2">
+                        {isAdmin && (
+                            <button onClick={() => setIsProductModalOpen(true)} className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 flex items-center gap-2">
+                                <Icon name="List" size={18} /> Gerenciar Produtos
+                            </button>
+                        )}
+                        <button onClick={() => handleOpenFormModal()} className="bg-brand-primary text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                            <Icon name="CirclePlus" size={18} /> Nova Licença
+                        </button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <input
+                        type="text"
+                        placeholder="Buscar por usuário, chave, etc..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="p-2 border dark:border-dark-border rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-dark-text-primary"
+                    />
+                    <select value={filterProduct} onChange={(e) => setFilterProduct(e.target.value)} className="p-2 border dark:border-dark-border rounded-md bg-white dark:bg-gray-800 text-gray-800 dark:text-dark-text-primary">
+                        <option value="">Todos os Produtos</option>
+                        {productNames.map(name => (
+                            <option key={name} value={name}>{name}</option>
+                        ))}
+                    </select>
+                </div>
+                
+                {loading ? (
+                    <div className="flex justify-center items-center py-10">
+                        <Icon name="LoaderCircle" className="animate-spin text-brand-primary" size={48} />
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto border dark:border-dark-border rounded-lg">
+                        <table className="w-full text-sm text-left text-gray-700 dark:text-dark-text-secondary">
+                            <thead className="text-xs text-gray-800 dark:text-dark-text-primary uppercase bg-gray-100 dark:bg-gray-900/50">
+                                <tr>
+                                    <th scope="col" className="px-6 py-3">Produto</th>
+                                    <th scope="col" className="px-6 py-3">Chave/Serial</th>
+                                    <th scope="col" className="px-6 py-3">Usuário</th>
+                                    <th scope="col" className="px-6 py-3">Status de Expiração</th>
+                                    <th scope="col" className="px-6 py-3 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredLicenses.map(item => (
+                                    <tr key={item.id} className={`border-b dark:border-dark-border last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700 ${item.approval_status === 'pending_approval' ? 'bg-yellow-50 dark:bg-yellow-900/20' : item.approval_status === 'rejected' ? 'bg-red-50 dark:bg-red-900/20 opacity-70' : 'bg-white dark:bg-dark-card'}`}>
+                                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-dark-text-primary">
+                                            {item.produto} <StatusBadge status={item.approval_status} />
+                                        </td>
+                                        <td className="px-6 py-4 font-mono text-xs">{item.chaveSerial}</td>
+                                        <td className="px-6 py-4">{item.usuario}</td>
+                                        <td className="px-6 py-4"><ExpirationStatus dateStr={item.dataExpiracao} /></td>
+                                        <td className="px-6 py-4 text-right">
+                                            <div className="flex items-center justify-end gap-3">
+                                                <button onClick={() => handleOpenFormModal(item)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300" title="Editar"><Icon name="Pencil" size={16} /></button>
+                                                <button onClick={() => handleDelete(item.id)} className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300" title="Excluir"><Icon name="Trash2" size={16} /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+            
+            <div className="bg-white dark:bg-dark-card p-4 sm:p-6 rounded-lg shadow-md">
+                <h3 className="text-xl font-bold text-brand-dark dark:text-dark-text-primary mb-4">Uso de Licenças</h3>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-gray-700 dark:text-dark-text-secondary">
+                         <thead className="text-xs text-gray-800 dark:text-dark-text-primary uppercase bg-gray-100 dark:bg-gray-900/50">
+                            <tr>
+                                <th scope="col" className="px-6 py-3">Produto</th>
+                                <th scope="col" className="px-6 py-3">Em Uso</th>
+                                <th scope="col" className="px-6 py-3">Total Adquirido</th>
+                                <th scope="col" className="px-6 py-3">Disponível</th>
+                            </tr>
+                         </thead>
+                         <tbody>
+                            {productNames.map(name => {
+                                const used = licenseUsage[name] || 0;
+                                const total = licenseTotals[name] || 0;
+                                const available = total - used;
+                                return (
+                                    <tr key={name} className="bg-white dark:bg-dark-card border-b dark:border-dark-border last:border-0">
+                                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-dark-text-primary">{name}</td>
+                                        <td className="px-6 py-4">{used}</td>
+                                        <td className="px-6 py-4">
+                                            <EditableTotal productName={name} value={total} onSave={handleSaveTotals} disabled={!isAdmin} />
+                                        </td>
+                                        <td className={`px-6 py-4 font-bold ${available > 5 ? 'text-green-600' : available > 0 ? 'text-yellow-600' : 'text-red-600'}`}>{available}</td>
+                                    </tr>
+                                );
+                            })}
+                         </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {isFormModalOpen && <LicenseFormModal license={editingLicense} productNames={productNames} onClose={handleCloseFormModal} onSave={handleSave} currentUser={currentUser} />}
+            {isProductModalOpen && <ProductManagementModal initialProductNames={productNames} onClose={() => setIsProductModalOpen(false)} onSave={handleSaveProducts} />}
+        </div>
+    );
+};
+
+export default LicenseControl;
