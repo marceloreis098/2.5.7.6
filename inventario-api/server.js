@@ -619,15 +619,14 @@ app.post('/api/equipment/periodic-update', isAdmin, async (req, res) => {
             const [existingEquipmentRows] = await connection.query('SELECT * FROM equipment WHERE serial = ?', [serial]);
             const existingEquipment = existingEquipmentRows[0];
 
-            let changes = [];
+            const changes = [];
             const fieldsToUpdate = [
                 'equipamento', 'usuarioAtual', 'brand', 'model', 'emailColaborador',
                 'identificador', 'nomeSO', 'memoriaFisicaTotal', 'grupoPoliticas',
                 'pais', 'cidade', 'estadoProvincia'
             ];
             
-            // Determine status based on usuarioAtual from Absolute data
-            let newStatus = existingEquipment ? existingEquipment.status : 'Estoque'; // Default for new or if no change
+            let newStatus = existingEquipment ? existingEquipment.status : 'Estoque';
             if (equipmentData.usuarioAtual && equipmentData.usuarioAtual.trim() !== '') {
                 newStatus = 'Em Uso';
             } else if (equipmentData.usuarioAtual === '' || equipmentData.usuarioAtual === null) {
@@ -636,10 +635,8 @@ app.post('/api/equipment/periodic-update', isAdmin, async (req, res) => {
             if (existingEquipment && existingEquipment.status !== newStatus) {
                 changes.push({ field: 'status', oldValue: existingEquipment.status, newValue: newStatus });
             }
-            equipmentData.status = newStatus; // Apply to current equipmentData for DB update
 
             if (existingEquipment) {
-                // Update existing equipment
                 const updateFields = {};
                 fieldsToUpdate.forEach(field => {
                     const newValue = equipmentData[field];
@@ -650,8 +647,11 @@ app.post('/api/equipment/periodic-update', isAdmin, async (req, res) => {
                     }
                 });
 
-                if (Object.keys(updateFields).length > 0 || changes.some(c => c.field === 'status')) {
-                    await connection.query('UPDATE equipment SET ?, status = ? WHERE id = ?', [updateFields, newStatus, existingEquipment.id]);
+                if (changes.length > 0) {
+                    if (changes.some(c => c.field === 'status')) {
+                        updateFields.status = newStatus;
+                    }
+                    await connection.query('UPDATE equipment SET ? WHERE id = ?', [updateFields, existingEquipment.id]);
                     await recordHistory(existingEquipment.id, username, changes);
                     logAction(username, 'UPDATE', 'EQUIPMENT', existingEquipment.id, `Periodic update: ${existingEquipment.equipamento}. Changes: ${changes.map(c => c.field).join(', ')}`);
                 }
@@ -659,9 +659,10 @@ app.post('/api/equipment/periodic-update', isAdmin, async (req, res) => {
                 // Insert new equipment
                 const newEquipment = {
                     ...equipmentData,
-                    approval_status: 'approved', // Always approved for periodic updates
+                    status: newStatus,
+                    approval_status: 'approved',
                     created_by_id: (await connection.query('SELECT id FROM users WHERE username = ?', [username]))[0][0].id,
-                    qrCode: JSON.stringify({ id: null, serial: equipmentData.serial, type: 'equipment' }) // Temporary QR, will be updated
+                    qrCode: JSON.stringify({ id: null, serial: equipmentData.serial, type: 'equipment' })
                 };
                 const [insertResult] = await connection.query('INSERT INTO equipment SET ?', [newEquipment]);
                 const insertedId = insertResult.insertId;
