@@ -522,7 +522,7 @@ app.post('/api/equipment/periodic-update', async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        const [existingEquipmentRows] = await connection.query('SELECT id, serial, usuarioAtual, status FROM equipment');
+        const [existingEquipmentRows] = await connection.query('SELECT * FROM equipment');
         const existingEquipmentMap = new Map(existingEquipmentRows.map(e => [e.serial.toUpperCase(), e]));
 
         const historyEntries = [];
