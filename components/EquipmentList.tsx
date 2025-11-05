@@ -5,6 +5,7 @@ import { QRCodeCanvas as QRCode } from 'qrcode.react';
 import { getEquipment, getEquipmentHistory, addEquipment, updateEquipment, deleteEquipment, getSettings } from '../services/apiService';
 import TermoResponsabilidade from './TermoResponsabilidade';
 import PeriodicUpdate from './PeriodicUpdate'; // Importar o novo componente
+import * as XLSX from 'xlsx';
 
 const StatusBadge: React.FC<{ status: Equipment['approval_status'], reason?: string }> = ({ status, reason }) => {
     if (!status || status === 'approved') return null;
@@ -662,51 +663,62 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
         });
     }, [searchTerm, equipment, filterStatus, filterType, filterGrupoPoliticas]);
 
-    const handleExportToCsv = () => {
+    const handleExportToXlsx = () => {
         if (filteredEquipment.length === 0) {
             alert("Nenhum dado para exportar com os filtros atuais.");
             return;
         }
-    
-        const headers: (keyof Equipment)[] = [
-            'id', 'equipamento', 'garantia', 'patrimonio', 'serial', 'usuarioAtual', 'usuarioAnterior',
-            'local', 'setor', 'dataEntregaUsuario', 'status', 'dataDevolucao', 'tipo', 'notaCompra',
-            'notaPlKm', 'termoResponsabilidade', 'brand', 'model', 'observacoes', 'emailColaborador',
-            'identificador', 'nomeSO', 'memoriaFisicaTotal', 'grupoPoliticas', 'pais', 'cidade',
-            'estadoProvincia', 'condicaoTermo', 'approval_status'
-        ];
-    
-        const escapeCsvCell = (cell: any): string => {
-            if (cell === null || cell === undefined) {
-                return '""';
-            }
-            const cellString = String(cell);
-            if (/[",\n\r]/.test(cellString)) {
-                return `"${cellString.replace(/"/g, '""')}"`;
-            }
-            return `"${cellString}"`;
+
+        // Mapeamento de chaves para cabeçalhos amigáveis
+        const headerMapping: { [K in keyof Equipment]?: string } = {
+            equipamento: 'Equipamento',
+            patrimonio: 'Patrimônio',
+            serial: 'Serial',
+            brand: 'Marca',
+            model: 'Modelo',
+            tipo: 'Tipo',
+            status: 'Status',
+            usuarioAtual: 'Usuário Atual',
+            emailColaborador: 'Email do Colaborador',
+            local: 'Local',
+            setor: 'Setor',
+            dataEntregaUsuario: 'Data de Entrega',
+            dataDevolucao: 'Data de Devolução',
+            condicaoTermo: 'Condição do Termo',
+            garantia: 'Garantia',
+            notaCompra: 'Nota de Compra',
+            identificador: 'Identificador',
+            nomeSO: 'Sistema Operacional',
+            memoriaFisicaTotal: 'Memória Física',
+            grupoPoliticas: 'Grupo de Políticas',
+            pais: 'País',
+            estadoProvincia: 'Estado/Província',
+            cidade: 'Cidade',
+            observacoes: 'Observações'
         };
-        
-        const headerRow = headers.join(',');
-        const rows = filteredEquipment.map(item => 
-            headers.map(header => escapeCsvCell(item[header])).join(',')
-        );
-    
-        const csvString = [headerRow, ...rows].join('\n');
-        
-        const blob = new Blob(['\uFEFF' + csvString], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        const fileName = `inventario_equipamentos_${new Date().toISOString().split('T')[0]}.csv`;
-        
-        link.setAttribute("href", url);
-        link.setAttribute("download", fileName);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+
+        const dataKeys = Object.keys(headerMapping) as (keyof Equipment)[];
+
+        // Mapeia os dados filtrados para o formato desejado com os cabeçalhos amigáveis
+        const dataToExport = filteredEquipment.map(item => {
+            const row: { [key: string]: any } = {};
+            dataKeys.forEach(key => {
+                const header = headerMapping[key];
+                if (header) {
+                    row[header] = item[key] ?? ''; // Usa string vazia para nulo/indefinido
+                }
+            });
+            return row;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Inventário");
+
+        const fileName = `inventario_equipamentos_${new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(wb, fileName);
     };
+
 
     const uniqueStatuses = useMemo(() => {
         const statuses = new Set(equipment.map(item => item.status).filter(Boolean) as string[]);
@@ -841,7 +853,7 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
                         </button>
                     )}
                     {isAdmin && (
-                        <button onClick={handleExportToCsv} className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 flex items-center gap-2">
+                        <button onClick={handleExportToXlsx} className="bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 flex items-center gap-2">
                             <Icon name="FileDown" size={18}/> Exportar para Excel
                         </button>
                     )}
