@@ -669,9 +669,16 @@ const EquipmentList: React.FC<EquipmentListProps> = ({ currentUser, companyName 
                 return;
             }
 
-            // Importa dinamicamente a biblioteca xlsx e lida com possíveis variações de módulo
-            const XLSXModule = await import('xlsx');
-            const XLSX = XLSXModule.default || XLSXModule;
+            // Dynamically import the library to ensure it's loaded.
+            // The UMD build from the CDN will attach the library to the window object.
+            await import('xlsx');
+            const XLSX = (window as any).XLSX;
+
+            if (!XLSX || !XLSX.utils || typeof XLSX.utils.json_to_sheet !== 'function') {
+                console.error("A biblioteca XLSX não foi carregada corretamente.", XLSX);
+                alert("Ocorreu um erro ao carregar a biblioteca de exportação. Verifique o console para mais detalhes.");
+                return;
+            }
 
             // Mapeamento de chaves para cabeçalhos amigáveis
             const headerMapping: { [K in keyof Equipment]?: string } = {
