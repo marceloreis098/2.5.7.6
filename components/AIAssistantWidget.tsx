@@ -4,7 +4,7 @@ import { getEquipment } from '../services/apiService';
 import { Equipment, User } from '../types';
 import Icon from './common/Icon';
 
-// FIX: Correctly destructure `currentUser` from props.
+// FIX: Correctly destructure `currentUser` from props to ensure it is available in the component.
 const AIAssistantWidget: React.FC<{ currentUser: User }> = ({ currentUser }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [query, setQuery] = useState('');

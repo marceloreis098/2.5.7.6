@@ -16,7 +16,7 @@ const AIAssistant: React.FC<{ currentUser: User }> = ({ currentUser }) => {
         const loadInventory = async () => {
             setIsDataLoading(true);
             try {
-// FIX: Pass the currentUser object to the getEquipment function as required.
+                // FIX: Pass the currentUser object to the getEquipment function as required by its signature.
                 const data = await getEquipment(currentUser);
                 setInventoryData(data);
             } catch (error) {

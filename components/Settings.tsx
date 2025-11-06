@@ -555,8 +555,8 @@ const Settings: React.FC<SettingsProps> = ({ currentUser }) => {
                                 </p>
                                 <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-400 text-blue-800 dark:text-blue-200 text-sm mb-6">
                                     <p className="font-semibold">Placeholders disponíveis:</p>
+                                    {/* FIX: Corrected JSX syntax for displaying placeholder strings. The double curly braces `{{...}}` are for style objects, not for rendering strings with braces. Wrapped the strings in template literals inside single curly braces. */}
                                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-                                        {/* FIX: Corrected JSX syntax for displaying placeholder strings. The double curly braces `{{...}}` are for style objects, not for rendering strings with braces. Wrapped the strings in template literals inside single curly braces. */}
                                         <code>{`{{USUARIO}}`}</code><code>{`{{EQUIPAMENTO}}`}</code><code>{`{{SERIAL}}`}</code><code>{`{{PATRIMONIO}}`}</code>
                                         <code>{`{{EMPRESA}}`}</code><code>{`{{DATA}}`}</code><code>{`{{DATA_ENTREGA}}`}</code><code>{`{{DATA_DEVOLUCAO}}`}</code>
                                     </div>

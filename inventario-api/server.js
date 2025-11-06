@@ -579,7 +579,7 @@ app.post('/api/equipment/import', isAdmin, async (req, res) => {
         }
         
         // Set consolidation flags
-        await connection.query("INSERT INTO app_config (config_key, config_value) VALUES ('hasInitialConsolidationRun', 'true'), ('lastAbsoluteUpdateTimestamp', NOW()) ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)");
+        await connection.query("INSERT INTO app_config (config_key, config_value) VALUES ('hasInitialConsolidationRun', 'true'), ('lastAbsoluteUpdateTimestamp', UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)");
         
         await connection.commit();
         logAction(username, 'UPDATE', 'EQUIPMENT', 'ALL', `Replaced entire equipment inventory with ${equipmentList.length} items via consolidation tool.`);
@@ -641,7 +641,7 @@ app.post('/api/equipment/periodic-update', isAdmin, async (req, res) => {
             }
         }
 
-        await connection.query("INSERT INTO app_config (config_key, config_value) VALUES ('lastAbsoluteUpdateTimestamp', NOW()) ON DUPLICATE KEY UPDATE config_value = NOW()");
+        await connection.query("INSERT INTO app_config (config_key, config_value) VALUES ('lastAbsoluteUpdateTimestamp', UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE config_value = UTC_TIMESTAMP()");
         await connection.commit();
         res.json({ success: true, message: 'Inventário atualizado com sucesso.' });
     } catch (err) {
@@ -967,10 +967,17 @@ app.get('/api/settings', async (req, res) => {
         const [rows] = await db.promise().query("SELECT config_key, config_value FROM app_config");
         const settings = rows.reduce((acc, row) => {
             let value = row.config_value;
-            if (value === 'true') value = true;
-            if (value === 'false') value = false;
-            if (row.config_key.endsWith('Port') && value) value = Number(value);
-            acc[row.config_key] = value;
+            
+            if (row.config_key === 'lastAbsoluteUpdateTimestamp' && value) {
+                // Appending 'Z' after replacing space with 'T' creates a valid ISO 8601 string 
+                // that the JS Date constructor will correctly parse as UTC.
+                acc[row.config_key] = value.replace(' ', 'T') + 'Z';
+            } else {
+                if (value === 'true') value = true;
+                if (value === 'false') value = false;
+                if (row.config_key.endsWith('Port') && value) value = Number(value);
+                acc[row.config_key] = value;
+            }
             return acc;
         }, {});
         res.json(settings);
